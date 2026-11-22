@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="NEXUS Open Standards Research Group / MEGAMICRO">
+<meta name="description" content="BOSS SP-202 Cleanroom Workstation — Dedicated to Ikutaro Kakehashi (1930–2017)">
+<title>BOSS SP-202 // Cleanroom Workstation — Tribute to Ikutaro Kakehashi</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<aside class="explorer-drawer" id="explorer-drawer">
+  <div class="drawer-head" id="explorer-drag-handle">
+    <div><div class="drawer-title">SP-202 SAMPLE EXPLORER</div><div class="drawer-sub">DRAG WINDOW // CLICK AUDITION // DRAG TO PADS</div></div>
+    <button class="drawer-close" id="btn-close-drawer">×</button>
+  </div>
+  <div class="drawer-actions">
+    <button class="hw-btn flex1" id="btn-load-folder">LOAD FOLDER</button>
+    <button class="hw-btn flex1" id="btn-load-files">LOAD FILES</button>
+    <input type="file" id="inp-folder" webkitdirectory multiple accept="audio/*" hidden>
+    <input type="file" id="inp-files" multiple accept="audio/*" hidden>
+  </div>
+  <div class="tree-screen" id="sample-tree"></div>
+  <div class="drawer-foot">Drag samples onto any pad in Bank (<b id="drawer-bank-lbl">A</b>). Click <b>REMAIN</b> for blue FX pads.</div>
+</aside>
+
+<div class="studio-wrap">
+  <div class="sp202-unit" id="unit">
+    <img src="202skin.jpg" alt="BOSS SP-202 Skin" class="sp202-skin">
+    <button class="btn" id="btn-sp-explorer" title="OPEN SAMPLE EXPLORER"></button>
+    <div class="knob-wrap" id="knob-vol" data-val="0.85" title="VOLUME (Drag / Wheel / Dbl-Click)"><div class="knob-cap"><div class="knob-top"></div></div><div class="knob-light"></div></div>
+    <div class="knob-wrap" id="knob-ctrl" data-val="0.50" title="FX CONTROL (Drag / Wheel / Dbl-Click)"><div class="knob-cap"><div class="knob-top"></div></div><div class="knob-light"></div></div>
+    <button class="btn fx-btn" id="fx-pitch" data-fx="pitch"></button>
+    <button class="btn fx-btn" id="fx-time" data-fx="time"></button>
+    <button class="btn fx-btn" id="fx-delay" data-fx="delay"></button>
+    <button class="btn fx-btn" id="fx-filter1" data-fx="filter1"></button>
+    <button class="btn fx-btn" id="fx-filter2" data-fx="filter2"></button>
+    <button class="btn fx-btn" id="fx-ringmod" data-fx="ringmod"></button>
+    <canvas class="bpm-canvas" id="bpm-canvas"></canvas>
+    <button class="btn" id="btn-bpm-dn" title="MASTER BPM -1"></button>
+    <button class="btn" id="btn-bpm-up" title="MASTER BPM +1"></button>
+    <button class="btn" id="btn-tap" title="TAP TEMPO"></button>
+    <div class="sp-dyn-display" id="sp-dyn-display">
+      <div class="disp-bank-bar">
+        <span class="disp-bank-badge">BANK</span>
+        <div class="disp-bank-letters">
+          <span class="bank-led lit" id="led-bank-0">A</span><span class="bank-led" id="led-bank-1">B</span>
+          <span class="bank-led" id="led-bank-2">C</span><span class="bank-led" id="led-bank-3">D</span>
+        </div>
+      </div>
+      <div class="disp-cols">
+        <div class="disp-col"><span class="mode-led lit" id="led-grade-0">HI-FI</span><span class="mode-led" id="led-grade-1">STANDARD</span><span class="mode-led" id="led-grade-2">LO-FI 1</span><span class="mode-led" id="led-grade-3">LO-FI 2</span></div>
+        <div class="disp-col"><span class="mode-led lit" id="led-mono-0">MONO</span><span class="mode-led" id="led-mono-1">STEREO</span></div>
+        <div class="disp-col"><span class="mode-led lit" id="led-trig-0">TRIGGER</span><span class="mode-led" id="led-trig-1">GATE</span></div>
+        <div class="disp-col"><span class="mode-led" id="led-loop-1">LOOP</span><span class="mode-led lit" id="led-loop-0">ONE SHOT</span></div>
+        <div class="disp-col"><span class="mode-led lit" id="led-rev-0">NORMAL</span><span class="mode-led" id="led-rev-1">REVERSE</span></div>
+      </div>
+    </div>
+    <button class="btn blk-btn" id="blk-0"></button><button class="btn blk-btn" id="blk-1"></button>
+    <button class="btn blk-btn" id="blk-2"></button><button class="btn blk-btn" id="blk-3"></button><button class="btn blk-btn" id="blk-4"></button>
+    <button class="btn util-btn" id="btn-del"></button><button class="btn util-btn" id="btn-rec"></button>
+    <button class="btn util-btn" id="btn-mark"></button><button class="btn util-btn" id="btn-cancel"></button>
+    <button class="btn util-btn" id="btn-remain"></button><button class="btn util-btn" id="btn-ab"></button><button class="btn util-btn" id="btn-cd"></button>
+    <button class="btn pad" id="pad-0" data-pad="0"></button><button class="btn pad" id="pad-1" data-pad="1"></button>
+    <button class="btn pad" id="pad-2" data-pad="2"></button><button class="btn pad" id="pad-3" data-pad="3"></button>
+    <button class="btn pad" id="pad-4" data-pad="4"></button><button class="btn pad" id="pad-5" data-pad="5"></button>
+    <button class="btn pad" id="pad-6" data-pad="6"></button><button class="btn pad" id="pad-7" data-pad="7"></button>
+    <button class="btn" id="btn-hold"></button><button class="btn" id="btn-source"></button>
+  </div>
+
+  <section class="sp202-rack">
+    <div class="rack-top">
+      <div class="rack-brand">
+        <span class="boss-tag">SP-202</span>
+        <span class="model-tag">EXPANSION // SEQ · WAVE · MIX · SONG</span>
+        <span class="tribute-tag" title="In Memory of Roland &amp; BOSS Founder Ikutaro Kakehashi (1930–2017)">梯郁太郎 TRIBUTE</span>
+      </div>
+      <div class="transport-bar">
+        <button class="hw-btn" id="btn-open-explorer">EXPLORER</button>
+        <button class="hw-btn" id="btn-play">▶ PLAY</button>
+        <button class="hw-btn" id="btn-stop">■ STOP</button>
+        <button class="hw-btn active" id="btn-mode-pat">PAT</button>
+        <button class="hw-btn" id="btn-mode-song">SONG</button>
+        <div class="led-readout" id="step-led">01:01</div>
+      </div>
+    </div>
+    <div class="rack-subbar">
+      <div class="tab-group"><span class="group-lbl">VIEW</span><button class="hw-btn active" data-tab="seq">SEQ</button><button class="hw-btn" data-tab="wave">WAVE</button><button class="hw-btn" data-tab="mix">MIXER</button><button class="hw-btn" data-tab="arr">SONG</button></div>
+      <div class="bpm-group"><span class="group-lbl">BPM</span><button class="hw-btn mini-btn" id="rack-bpm-dn">-</button><input type="number" class="bpm-input" id="rack-bpm-inp" min="40" max="240" step="0.01" value="90"><button class="hw-btn mini-btn" id="rack-bpm-up">+</button></div>
+      <div class="bank-group" id="bank-selector"><span class="group-lbl">BANK</span><button class="hw-btn mini-btn active" data-bank="0">A</button><button class="hw-btn mini-btn" data-bank="1">B</button><button class="hw-btn mini-btn" data-bank="2">C</button><button class="hw-btn mini-btn" data-bank="3">D</button></div>
+      <div class="pat-group" id="pat-selector"><span class="group-lbl">PAT</span></div>
+    </div>
+    <div class="rack-body">
+      <div class="view-panel active" id="view-seq">
+        <div class="panel-hdr">
+          <div class="panel-title">STEP SEQUENCER // BANK <span id="seq-bank-lbl">A</span> · <span id="seq-pat-label">P1</span></div>
+          <div class="panel-controls">
+            <label class="swing-wrap">SWING <input type="range" id="rng-swing" min="0" max="40" value="10"><span id="lbl-swing">10%</span></label>
+            <button class="hw-btn" id="btn-seq-demo">BOOM-BAP</button>
+            <button class="hw-btn" id="btn-seq-clear">CLEAR BANK</button>
+          </div>
+        </div>
+        <div class="seq-grid-wrap" id="seq-grid"></div>
+      </div>
+
+      <div class="view-panel" id="view-wave">
+        <div class="panel-hdr">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="wave-menu-wrap" id="wave-file-menu-wrap">
+              <button class="hw-btn" id="btn-wave-file-menu">FILE ▾</button>
+              <div class="wave-file-menu" id="wave-file-menu">
+                <button class="menu-item" id="menu-export-fx"><span>EXPORT WAV (FX + RATE + PITCH)</span><span class="sub">.WAV</span></button>
+                <button class="menu-item" id="menu-export-raw"><span>EXPORT WAV (TRIMMED RAW)</span><span class="sub">.WAV</span></button>
+                <div class="menu-sep"></div>
+                <button class="menu-item" id="menu-truncate-pad"><span>TRUNCATE TO MARK POINTS</span><span class="sub">DEL+MARK</span></button>
+                <button class="menu-item" id="menu-reset-marks"><span>RESET MARKS &amp; PITCH</span><span class="sub">1.0x</span></button>
+              </div>
+            </div>
+            <div class="panel-title">MARK WAVE // <span id="wave-pad-lbl">BANK A · PAD 1</span></div>
+          </div>
+          <div class="panel-controls">
+            <div class="wave-bpm-stepper" title="Pitch Sample by BPM (±1 BPM or Type Decimals)">
+              <span class="group-lbl">BPM</span>
+              <button class="hw-btn mini-btn" id="btn-pad-bpm-dn" title="Pitch Down -1 BPM">-</button>
+              <input type="number" class="bpm-input wave-bpm-input" id="wave-bpm-inp" min="20" max="400" step="0.01" placeholder="---">
+              <button class="hw-btn mini-btn" id="btn-pad-bpm-up" title="Pitch Up +1 BPM">+</button>
+              <button class="hw-btn beats-btn" id="btn-wave-beats" title="Cycle Beat Length (1B/2B/4B/8B/16B/32B)">4B</button>
+            </div>
+            <button class="hw-btn" id="btn-match-master" title="Pitch Sample to Match Master BPM">MATCH</button>
+            <button class="hw-btn" id="btn-sync-bpm" title="Lock Master BPM to Sample BPM">→MST</button>
+            <button class="hw-btn mini-btn" id="btn-zoom-out">-</button>
+            <span class="zoom-tag" id="lbl-zoom">1x</span>
+            <button class="hw-btn mini-btn" id="btn-zoom-in">+</button>
+            <button class="hw-btn" id="btn-zoom-fit">FIT</button>
+            <button class="hw-btn" id="btn-wave-audition">▶ PLAY</button>
+            <button class="hw-btn" id="btn-wave-reset">RESET</button>
+          </div>
+        </div>
+        <div class="mini-wave-wrap" id="mini-wave-wrap"><canvas id="mini-wave-canvas"></canvas></div>
+        <div class="wave-canvas-wrap" id="wave-wrap"><canvas id="wave-canvas"></canvas></div>
+        <div class="wave-controls">
+          <div class="wave-ctrl-box"><div class="wave-ctrl-top"><span>START POINT</span><b id="lbl-start-ms">0.000 s</b></div><input type="range" class="wave-slider" id="rng-start" min="0" max="1" step="any" value="0"></div>
+          <div class="wave-ctrl-box"><div class="wave-ctrl-top"><span>END POINT</span><b id="lbl-end-ms">0.000 s</b></div><input type="range" class="wave-slider" id="rng-end" min="0" max="1" step="any" value="1"></div>
+          <div class="wave-ctrl-box"><div class="wave-ctrl-top"><span>PAD PITCH (DBL-CLK 0)</span><b id="lbl-pad-pitch">0.00 st</b></div><input type="range" class="wave-slider" id="rng-pitch" min="-12" max="12" step="0.05" value="0"></div>
+        </div>
+        <div class="wave-meta"><span id="wave-mode-summary">GRADE: HI-FI (31.25kHz / 12-BIT) | MONO | TRIGGER | ONE SHOT | NORMAL</span><span>WHEEL=ZOOM · MINI-WAVE=PAN · L-DRAG=START · R-DRAG=END</span></div>
+      </div>
+
+      <div class="view-panel" id="view-mix">
+        <div class="panel-hdr"><div class="panel-title">8-TRACK MIXER // BANK <span id="mix-bank-lbl">A</span></div><div class="panel-controls"><button class="hw-btn" id="btn-mix-reset">RESET MIX</button></div></div>
+        <div class="mixer-grid" id="mixer-grid"></div>
+      </div>
+
+      <div class="view-panel" id="view-arr">
+        <div class="panel-hdr"><div class="panel-title">SONG ARRANGER // BANK <span id="arr-bank-lbl">A</span> · 16 BARS</div><div class="panel-controls"><button class="hw-btn" id="btn-arr-fill">FILL ALL</button><button class="hw-btn" id="btn-arr-clear">CLEAR SONG</button></div></div>
+        <div class="arr-wrap" id="arr-grid"></div>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="hud" id="hud"><b>SP-202</b> // BANK A: JP KIT · BANK B: SOVIET DRUMS · REC=RESAMPLE · FILE=WAV EXPORT</div>
+
+<script src="app.js"></script>
+</body>
+</html>
