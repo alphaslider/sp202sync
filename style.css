@@ -436,18 +436,28 @@ body {
   transform: rotate(0deg);
 }
 
+.knob-cap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, #2a2f38 0%, #16191f 62%, #090b0e 100%);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.95), 0 2px 4px rgba(0, 0, 0, 0.9), 0 0 0 1.5px #07080a, inset 0 1px 2px rgba(255, 255, 255, 0.16);
+  transform: rotate(0deg);
+}
+
 .knob-top {
   position: absolute;
-  inset: 13%;
+  inset: 5%;
   border-radius: 50%;
   background: radial-gradient(circle at 36% 30%, #343942 0%, #1c1f26 56%, #0d0f13 100%);
-  box-shadow: inset 0 1.5px 2px rgba(255, 255, 255, 0.22), inset 0 -2px 5px rgba(0, 0, 0, 0.9), 0 0 0 2px #090b0e;
+  box-shadow: inset 0 1.5px 2px rgba(255, 255, 255, 0.22), inset 0 -2px 5px rgba(0, 0, 0, 0.9);
 }
 
 .knob-top::before {
   content: "";
   position: absolute;
-  inset: 21%;
+  inset: 22%;
   border-radius: 50%;
   background: radial-gradient(circle at 36% 30%, #ff5c54 0%, #d81b2b 56%, #800a14 100%);
   box-shadow: inset 0 1.5px 2px rgba(255, 255, 255, 0.4), 0 1px 4px rgba(0, 0, 0, 0.85);
@@ -456,10 +466,10 @@ body {
 .knob-top::after {
   content: "";
   position: absolute;
-  top: -11%;
+  top: 2%;
   left: 50%;
-  width: 10.5%;
-  height: 38%;
+  width: 10%;
+  height: 32%;
   transform: translateX(-50%);
   background: linear-gradient(90deg, #090b0e 0%, #edf2ff 24%, #ffffff 50%, #cfd8e8 76%, #090b0e 100%);
   border-radius: 1.5px;
@@ -1121,36 +1131,81 @@ input[type="range"]:not(.v-fader)::-moz-range-thumb {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95);
 }
 
-.step-cell {
+ .step-cell {
   height: 100%;
   min-height: 26px;
-  border: none;
+  border: 1px solid #0b0d10;
   border-radius: 4px;
-  background: #252930;
+  background: linear-gradient(165deg, #ccd3db 0%, #b8c0c9 55%, #9fa8b3 100%);
   cursor: ns-resize;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 -2px 3px rgba(0, 0, 0, 0.45);
-  transition: background 0.04s, box-shadow 0.06s;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.72),
+    inset 0 -2px 3px rgba(35, 40, 48, 0.42),
+    0 1px 2px rgba(0, 0, 0, 0.85);
+  transition: background 0.05s, box-shadow 0.07s;
   position: relative;
   overflow: hidden;
 }
 
-.step-cell.beat-start {
-  background: #2e333c;
+.step-cell::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff9ee 0%, #e8dfd0 70%, #c8bfb0 100%);
+  box-shadow: inset 0 0.5px 1px rgba(0, 0, 0, 0.35), 0 0 2px rgba(255, 248, 232, 0.45);
+  pointer-events: none;
+}
+
+/* Shaded every 4 steps (Beats 2 & 4: steps 5–8 and 13–16) */
+.step-cell:not(.on)[data-step="4"],
+.step-cell:not(.on)[data-step="5"],
+.step-cell:not(.on)[data-step="6"],
+.step-cell:not(.on)[data-step="7"],
+.step-cell:not(.on)[data-step="12"],
+.step-cell:not(.on)[data-step="13"],
+.step-cell:not(.on)[data-step="14"],
+.step-cell:not(.on)[data-step="15"] {
+  background: linear-gradient(165deg, #98a0ab 0%, #838c97 55%, #6d7682 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.48),
+    inset 0 -2px 3px rgba(20, 24, 30, 0.55),
+    0 1px 2px rgba(0, 0, 0, 0.85);
 }
 
 .step-cell.on {
-  background: radial-gradient(circle at 50% 45%, rgba(255, 145, 165, calc(0.18 + var(--v, 1) * 0.82)) 0%, rgba(240, 42, 78, calc(0.14 + var(--v, 1) * 0.82)) 60%, rgba(165, 16, 45, calc(0.12 + var(--v, 1) * 0.75)) 100%);
-  box-shadow: 0 0 calc(3px + var(--v, 1) * 12px) rgba(255, 55, 85, calc(0.15 + var(--v, 1) * 0.65)), inset 0 0 8px rgba(255, 205, 215, calc(var(--v, 1) * 0.45));
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(255, 130, 145, calc(0.32 + var(--v, 1) * 0.63)) 0%,
+    rgba(255, 55, 85, calc(0.28 + var(--v, 1) * 0.54)) 55%,
+    rgba(220, 20, 55, calc(0.24 + var(--v, 1) * 0.42)) 100%
+  ), linear-gradient(165deg, #c7ced6 0%, #9ca5b0 100%);
+  box-shadow:
+    0 0 calc(6px + var(--v, 1) * 14px) rgba(255, 65, 95, calc(0.28 + var(--v, 1) * 0.55)),
+    0 0 calc(10px + var(--v, 1) * 20px) rgba(255, 40, 75, calc(0.16 + var(--v, 1) * 0.32)),
+    inset 0 0 12px rgba(255, 190, 200, calc(0.25 + var(--v, 1) * 0.4));
+}
+
+.step-cell.on::before {
+  background: radial-gradient(circle at 40% 35%, #ffffff 0%, #ffd8df 65%, #ff6b85 100%);
+  box-shadow: 0 0 6px rgba(255, 210, 220, 0.95);
 }
 
 .step-cell.playhead {
-  box-shadow: inset 0 0 0 2px rgba(255, 210, 215, 0.5);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 65, 95, 0.85),
+    0 0 8px rgba(255, 65, 95, 0.45);
 }
 
 .step-cell.on.playhead {
-  box-shadow: 0 0 calc(8px + var(--v, 1) * 14px) rgba(255, 90, 120, 0.95), inset 0 0 0 2px rgba(255, 230, 235, 0.75);
+  box-shadow:
+    0 0 calc(10px + var(--v, 1) * 18px) rgba(255, 75, 105, 0.95),
+    inset 0 0 0 2px rgba(255, 235, 240, 0.9),
+    inset 0 0 14px rgba(255, 190, 200, 0.65);
 }
-
 /* WAVE EDITOR & FILE MENU */
 .mini-wave-wrap {
   height: 44px;
