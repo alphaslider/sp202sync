@@ -25,9 +25,10 @@ const songBars=Array.from({length:NUM_BARS},()=>({pat:0,tracks:Array.from({lengt
 let currentBank=0,selectedPad=0,currentPat=0,holdOn=false,remainMode=false,deleteMode=false,truncateMode=false,deleteTargetPad=null;
 let resampleState=null,resampleTarget=null,resampleNode=null,resampleChunksL=[],resampleChunksR=[],resampleFrames=0,resampleIdx=1;
 let bpm=90,baseBpm=90,displayedLedValue=90,swingPct=10,volVal=0.85,lastTap=0;
-let isPlaying=false,playMode="pat",currentStep=0,currentBar=0,nextStepTime=0,schedTimer=null;
+let isPlaying=false,playMode="pat",currentStep=0,currentBar=0,uiStep=0,uiBar=0,nextStepTime=0,schedTimer=null;
 let auditionSource=null,auditionEl=null,draggingSampleId=null,sampleIdCounter=1;
 const sampleRegistry=new Map(),folderTree={name:"ROOT",folders:{},files:[]},meterSegsUI=Array.from({length:NUM_PADS},()=>[]);
+const faderAnimIds=new Array(NUM_PADS).fill(null);
 const hud=$("hud"),stepLed=$("step-led"),drawer=$("explorer-drawer"),spExplorerBtn=$("btn-sp-explorer"),rackBpmInp=$("rack-bpm-inp"),waveBpmInp=$("wave-bpm-inp"),btnWaveBeats=$("btn-wave-beats");
 
 const curPadObj=()=>banks[currentBank][selectedPad];
@@ -38,31 +39,304 @@ const fmtBpm=v=>Number.isFinite(v)?Number(v.toFixed(2)).toString():"";
 const getMinNormGap=p=>(!p||!p.buffer||!p.buffer.duration)?0.0001:Math.min(0.05,0.015/p.buffer.duration);
 const getMaxZoomForPad=p=>(!p||!p.buffer||!p.buffer.duration)?64:Math.max(64,Math.min(2048,Math.ceil(p.buffer.duration/0.04)));
 
-// 7-SEG LED
-const bpmCanvas=$("bpm-canvas"),bpmCtx=bpmCanvas.getContext("2d");
-const SEG_MAP={"0":[1,1,1,1,1,1,0],"1":[0,1,1,0,0,0,0],"2":[1,1,0,1,1,0,1],"3":[1,1,1,1,0,0,1],"4":[0,1,1,0,0,1,1],"5":[1,0,1,1,0,1,1],"6":[1,0,1,1,1,1,1],"7":[1,1,1,0,0,0,0],"8":[1,1,1,1,1,1,1],"9":[1,1,1,1,0,1,1],"-":[0,0,0,0,0,0,1]," ":[0,0,0,0,0,0,0]};
+// SP-202 SEQUENCER SKIN, VELOCITY POTS & 7-SEGMENT RACK INJECTION
+(function injectSp202SequencerSkin(){
+  if(!$("sp202-seq-skin-css")){
+    const st=document.createElement("style");
+    st.id="sp202-seq-skin-css";
+    st.textContent=`
+      #seq-led-rack{
+        display:grid;
+        grid-template-columns:1.15fr 1.35fr 0.75fr;
+        gap:10px;
+        margin:0 0 10px 0;
+        padding:8px 10px;
+        background:linear-gradient(180deg,#1a1d22 0%,#121418 100%);
+        border:1px solid #2b3038;
+        border-top-color:#3a404a;
+        border-radius:3px;
+        box-shadow:inset 0 2px 6px rgba(0,0,0,0.85),0 1px 0 rgba(255,255,255,0.05);
+      }
+      .seq-led-bay{
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        gap:4px;
+        padding:4px 8px 6px;
+        background:#0b0c0f;
+        border:1px solid #262a31;
+        border-top-color:#07080a;
+        border-bottom-color:#353a44;
+        border-radius:2px;
+        box-shadow:inset 0 2px 8px rgba(0,0,0,0.95);
+        user-select:none;
+      }
+      .seq-led-bay.interactive{cursor:ns-resize;}
+      .seq-led-bay.clickable{cursor:pointer;}
+      .seq-led-lbl{
+        font-family:"Courier New",monospace;
+        font-size:9px;
+        font-weight:700;
+        letter-spacing:1.4px;
+        color:#e05a47;
+        text-transform:uppercase;
+        text-shadow:0 1px 1px #000;
+      }
+      .seq-led-glass{
+        position:relative;
+        width:100%;
+        height:34px;
+        background:radial-gradient(ellipse at 50% 45%,#1b090c 0%,#090405 78%,#050203 100%);
+        border:1px solid #1e1214;
+        border-radius:2px;
+        box-shadow:inset 0 1px 6px rgba(0,0,0,0.95);
+        overflow:hidden;
+      }
+      .seq-led-glass::after{
+        content:"";
+        position:absolute;
+        inset:0;
+        background:linear-gradient(180deg,rgba(255,255,255,0.06) 0%,rgba(255,255,255,0) 48%);
+        pointer-events:none;
+      }
+      .seq-led-glass canvas{
+        display:block;
+        width:100%;
+        height:100%;
+      }
+      /* TRACK VELOCITY ROTARY POT */
+      #seq-grid .seq-vel-sq{
+        position:relative !important;
+        width:22px !important;
+        height:22px !important;
+        min-width:22px !important;
+        padding:0 !important;
+        border-radius:50% !important;
+        background:radial-gradient(circle at 35% 30%,#383d46 0%,#1a1d22 72%,#0d0f12 100%) !important;
+        border:1px solid #090b0d !important;
+        box-shadow:
+          0 2px 4px rgba(0,0,0,0.85),
+          inset 0 1px 1px rgba(255,255,255,0.16),
+          0 0 0 1px rgba(255,255,255,0.05) !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        cursor:ns-resize !important;
+        user-select:none !important;
+      }
+      #seq-grid .seq-vel-cap{
+        position:relative;
+        width:16px;
+        height:16px;
+        border-radius:50%;
+        background:radial-gradient(circle at 35% 30%,#2d323a 0%,#14171b 85%);
+        box-shadow:inset 0 1px 1px rgba(255,255,255,0.18),0 1px 2px rgba(0,0,0,0.9);
+        pointer-events:none;
+      }
+      #seq-grid .seq-vel-ptr{
+        position:absolute;
+        top:1.5px;
+        left:50%;
+        transform:translateX(-50%);
+        width:2px;
+        height:6px;
+        border-radius:1px;
+        background:#ff4e3a;
+        box-shadow:0 0 4px rgba(255,70,50,0.9);
+      }
+      /* SP-202 RUBBER SILICONE STEP KEYS + 4-STEP ERGONOMIC SHADING */
+      #seq-grid .seq-row{
+        border-bottom:1px solid rgba(255,255,255,0.04);
+        padding:3px 0;
+      }
+      #seq-grid .step-num.beat{
+        color:#e05a47 !important;
+        font-weight:700;
+      }
+      #seq-grid .step-num.now{
+        color:#ff3850 !important;
+        text-shadow:0 0 6px rgba(255,40,60,0.9);
+      }
+      #seq-grid .step-cell{
+        position:relative !important;
+        background:linear-gradient(180deg,#d0d4da 0%,#b8bec6 56%,#9ea5ae 100%) !important;
+        border:1px solid #12151a !important;
+        border-radius:3px !important;
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,0.7),
+          inset 0 -2px 2px rgba(0,0,0,0.32),
+          0 2px 3px rgba(0,0,0,0.68) !important;
+        transition:transform 0.04s ease,box-shadow 0.06s ease,filter 0.06s ease !important;
+        overflow:hidden;
+      }
+      #seq-grid .step-cell.beat-alt{
+        background:linear-gradient(180deg,#b0b6be 0%,#989fa9 56%,#808792 100%) !important;
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,0.48),
+          inset 0 -2px 2px rgba(0,0,0,0.38),
+          0 2px 3px rgba(0,0,0,0.72) !important;
+      }
+      #seq-grid .step-cell::before{
+        content:"";
+        position:absolute;
+        top:4px;
+        left:50%;
+        transform:translateX(-50%);
+        width:52%;
+        height:4px;
+        border-radius:1px;
+        background:#4c515a;
+        box-shadow:inset 0 1px 2px rgba(0,0,0,0.88),0 1px 0 rgba(255,255,255,0.35);
+        pointer-events:none;
+      }
+      #seq-grid .step-cell:active{
+        transform:translateY(1px);
+      }
+      #seq-grid .step-cell.on{
+        background:radial-gradient(circle at 50% 34%,#ffaa88 0%,#ff6954 48%,#d93a32 100%) !important;
+        border-color:#2a0b09 !important;
+        box-shadow:
+          inset 0 1px 1px rgba(255,230,215,0.8),
+          inset 0 -2px 3px rgba(135,18,14,0.55),
+          0 0 calc(3px + var(--v,0.85)*10px) rgba(255,66,46,calc(0.28 + var(--v,0.85)*0.55)),
+          0 2px 3px rgba(0,0,0,0.72) !important;
+        filter:saturate(calc(0.62 + var(--v,0.85)*0.52)) brightness(calc(0.84 + var(--v,0.85)*0.24));
+      }
+      #seq-grid .step-cell.on::before{
+        background:#ff261c;
+        box-shadow:0 0 6px #ff3a2c,0 0 2px #fff2df;
+      }
+      /* SLIT-ONLY PLAYHEAD LED (NO PILLAR HIGHLIGHT) */
+      #seq-grid .step-cell.playhead::before{
+        background:#ff4636 !important;
+        box-shadow:0 0 7px #ff3322,0 0 2px #ffe8cc !important;
+      }
+      #seq-grid .step-cell.on.playhead::before{
+        background:#fff3d6 !important;
+        box-shadow:0 0 8px #ffaa66,0 0 3px #ffffff !important;
+      }
+    `;
+    document.head.appendChild(st);
+  }
+  const seqGrid=$("seq-grid");
+  if(seqGrid&&!$("seq-led-rack")){
+    const rack=document.createElement("div");
+    rack.id="seq-led-rack";
+    rack.innerHTML=`
+      <div class="seq-led-bay">
+        <div class="seq-led-lbl">BAR / BEAT</div>
+        <div class="seq-led-glass"><canvas id="seq-led-bar"></canvas></div>
+      </div>
+      <div class="seq-led-bay interactive" id="seq-bay-bpm" title="Drag Up/Down or Scroll to Adjust BPM">
+        <div class="seq-led-lbl">BPM</div>
+        <div class="seq-led-glass"><canvas id="seq-led-bpm"></canvas></div>
+      </div>
+      <div class="seq-led-bay clickable" id="seq-bay-pat" title="Click to Cycle Pattern (P1–P8)">
+        <div class="seq-led-lbl">PATTERN</div>
+        <div class="seq-led-glass"><canvas id="seq-led-pat"></canvas></div>
+      </div>
+    `;
+    seqGrid.parentNode.insertBefore(rack,seqGrid);
+  }
+})();
+
+// 7-SEG LED RENDERER (SHARED BY SP-202 & SEQUENCER DISPLAY BAYS)
+const bpmCanvas=$("bpm-canvas");
+const seqBarCanvas=$("seq-led-bar"),seqBpmCanvas=$("seq-led-bpm"),seqPatCanvas=$("seq-led-pat");
+const SEG_MAP={
+  "0":[1,1,1,1,1,1,0],"1":[0,1,1,0,0,0,0],"2":[1,1,0,1,1,0,1],"3":[1,1,1,1,0,0,1],
+  "4":[0,1,1,0,0,1,1],"5":[1,0,1,1,0,1,1],"6":[1,0,1,1,1,1,1],"7":[1,1,1,0,0,0,0],
+  "8":[1,1,1,1,1,1,1],"9":[1,1,1,1,0,1,1],"-":[0,0,0,0,0,0,1]," ":[0,0,0,0,0,0,0],
+  "P":[1,1,0,0,1,1,1],"A":[1,1,1,0,1,1,1],"B":[0,0,1,1,1,1,1],"C":[1,0,0,1,1,1,0],"D":[0,1,1,1,1,0,1]
+};
 function drawSeg(ctx,x,y,l,t,v){
   const h=t/2;ctx.beginPath();
   if(!v){ctx.moveTo(x+h,y);ctx.lineTo(x+l-h,y);ctx.lineTo(x+l,y+h);ctx.lineTo(x+l-h,y+t);ctx.lineTo(x+h,y+t);ctx.lineTo(x,y+h);}
   else{ctx.moveTo(x+h,y);ctx.lineTo(x+t,y+h);ctx.lineTo(x+t,y+l-h);ctx.lineTo(x+h,y+l);ctx.lineTo(x,y+l-h);ctx.lineTo(x,y+h);}
   ctx.closePath();ctx.fill();
 }
-function drawSevenSegDisplay(val){
-  displayedLedValue=val;const r=bpmCanvas.getBoundingClientRect();if(!r.width||!r.height)return;
+function drawSevenSegCanvas(canvas,text){
+  if(!canvas)return;
+  const r=canvas.getBoundingClientRect();if(!r.width||!r.height)return;
   const dpr=window.devicePixelRatio||1,w=r.width,h=r.height;
-  if(bpmCanvas.width!==Math.floor(w*dpr)||bpmCanvas.height!==Math.floor(h*dpr)){bpmCanvas.width=Math.floor(w*dpr);bpmCanvas.height=Math.floor(h*dpr);}
-  bpmCtx.setTransform(dpr,0,0,dpr,0,0);bpmCtx.clearRect(0,0,w,h);
-  const str=String(val==null?"---":Math.round(val)).padStart(3," ").slice(-3);
-  const padX=w*0.06,padY=h*0.12,digH=h-padY*2,digSlot=(w-padX*2)/3,digW=digSlot*0.72,thick=Math.max(2.2,digH*0.125),gap=thick*0.28;
-  for(let i=0;i<3;i++){
-    const segs=SEG_MAP[str[i]||" "]||SEG_MAP[" "],ox=padX+i*digSlot+(digSlot-digW)*0.5;
-    bpmCtx.save();bpmCtx.translate(ox+digW*0.08,padY);bpmCtx.transform(1,0,-0.11,1,0,0);
-    const hL=digW-thick*0.9,vL=(digH-thick*1.1)/2;
-    const coords=[()=>drawSeg(bpmCtx,thick*0.45,0,hL,thick,0),()=>drawSeg(bpmCtx,digW-thick,thick*0.5+gap,vL-gap,thick,1),()=>drawSeg(bpmCtx,digW-thick,digH/2+gap,vL-gap,thick,1),()=>drawSeg(bpmCtx,thick*0.45,digH-thick,hL,thick,0),()=>drawSeg(bpmCtx,0,digH/2+gap,vL-gap,thick,1),()=>drawSeg(bpmCtx,0,thick*0.5+gap,vL-gap,thick,1),()=>drawSeg(bpmCtx,thick*0.45,(digH-thick)/2,hL,thick,0)];
-    bpmCtx.shadowBlur=0;bpmCtx.fillStyle="rgba(65,14,18,0.34)";coords.forEach(fn=>fn());
-    bpmCtx.fillStyle="#ff2638";bpmCtx.shadowColor="rgba(255,30,50,0.95)";bpmCtx.shadowBlur=Math.max(6,digH*0.22);
-    segs.forEach((on,idx)=>{if(on)coords[idx]();});bpmCtx.restore();
+  if(canvas.width!==Math.floor(w*dpr)||canvas.height!==Math.floor(h*dpr)){canvas.width=Math.floor(w*dpr);canvas.height=Math.floor(h*dpr);}
+  const ctx=canvas.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+  const tokens=[];
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(ch==="."){if(tokens.length&&!tokens[tokens.length-1].colon)tokens[tokens.length-1].dp=true;}
+    else if(ch===":")tokens.push({colon:true});
+    else tokens.push({ch,dp:false});
   }
+  const padX=w*0.06,padY=h*0.13,digH=h-padY*2;
+  const totalUnits=tokens.reduce((a,t)=>a+(t.colon?0.36:1),0)||1;
+  const maxDigW=digH*0.56;
+  const unitW=Math.min((w-padX*2)/totalUnits,maxDigW/0.74);
+  const usedW=unitW*totalUnits;
+  let curX=(w-usedW)*0.5;
+  const thick=Math.max(2,digH*0.13),gap=thick*0.28;
+  tokens.forEach(tok=>{
+    if(tok.colon){
+      const cx=curX+unitW*0.18,dotR=Math.max(1.6,thick*0.55);
+      ctx.save();ctx.fillStyle="#ff2638";ctx.shadowColor="rgba(255,30,50,0.95)";ctx.shadowBlur=Math.max(5,digH*0.2);
+      [0.32,0.68].forEach(fy=>{ctx.beginPath();ctx.arc(cx,padY+digH*fy,dotR,0,Math.PI*2);ctx.fill();});
+      ctx.restore();curX+=unitW*0.36;return;
+    }
+    const digW=unitW*0.72,ox=curX+(unitW-digW)*0.5,segs=SEG_MAP[tok.ch]||SEG_MAP[" "];
+    ctx.save();ctx.translate(ox+digW*0.08,padY);ctx.transform(1,0,-0.11,1,0,0);
+    const hL=digW-thick*0.9,vL=(digH-thick*1.1)/2;
+    const coords=[
+      ()=>drawSeg(ctx,thick*0.45,0,hL,thick,0),
+      ()=>drawSeg(ctx,digW-thick,thick*0.5+gap,vL-gap,thick,1),
+      ()=>drawSeg(ctx,digW-thick,digH/2+gap,vL-gap,thick,1),
+      ()=>drawSeg(ctx,thick*0.45,digH-thick,hL,thick,0),
+      ()=>drawSeg(ctx,0,digH/2+gap,vL-gap,thick,1),
+      ()=>drawSeg(ctx,0,thick*0.5+gap,vL-gap,thick,1),
+      ()=>drawSeg(ctx,thick*0.45,(digH-thick)/2,hL,thick,0)
+    ];
+    ctx.shadowBlur=0;ctx.fillStyle="rgba(65,14,18,0.34)";coords.forEach(fn=>fn());
+    ctx.fillStyle="#ff2638";ctx.shadowColor="rgba(255,30,50,0.95)";ctx.shadowBlur=Math.max(6,digH*0.22);
+    segs.forEach((on,idx)=>{if(on)coords[idx]();});
+    if(tok.dp){
+      const dpR=Math.max(1.5,thick*0.52);
+      ctx.beginPath();ctx.arc(digW+thick*0.65,digH-dpR,dpR,0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore();curX+=unitW;
+  });
+}
+function drawSevenSegDisplay(val){
+  displayedLedValue=val;
+  const str=String(val==null?"---":Math.round(val)).padStart(3," ").slice(-3);
+  drawSevenSegCanvas(bpmCanvas,str);
+}
+function drawSeqDisplays(step=uiStep,bar=uiBar){
+  uiStep=step;uiBar=bar;
+  const barStr=`${String(bar+1).padStart(2,"0")}:${String(step+1).padStart(2,"0")}`;
+  const bpmStr=(bpm<100?" ":"")+bpm.toFixed(2);
+  const patStr=`P${currentPat+1}`;
+  drawSevenSegCanvas(seqBarCanvas,barStr);
+  drawSevenSegCanvas(seqBpmCanvas,bpmStr);
+  drawSevenSegCanvas(seqPatCanvas,patStr);
+}
+
+// INTERACTIVE SEQUENCER DISPLAY BAYS
+if($("seq-bay-bpm")){
+  $("seq-bay-bpm").onmousedown=e=>{
+    e.preventDefault();const sy=e.clientY,sb=baseBpm;
+    const mv=ev=>updateBpm(sb+(sy-ev.clientY)*0.35);
+    const up=()=>{window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",up);};
+    window.addEventListener("mousemove",mv);window.addEventListener("mouseup",up);
+  };
+  $("seq-bay-bpm").addEventListener("wheel",e=>{e.preventDefault();updateBpm(baseBpm+(e.deltaY<0?1:-1));},{passive:false});
+}
+if($("seq-bay-pat")){
+  $("seq-bay-pat").onclick=()=>{
+    const nxt=(currentPat+1)%NUM_PATS;
+    const btns=$("pat-selector").querySelectorAll(".mini-btn");
+    if(btns[nxt])btns[nxt].click();
+  };
 }
 
 // BPM & PITCH
@@ -77,6 +351,7 @@ function syncSequencerTimeWarp(){
   bpm=Math.max(40,Math.min(240,Math.round(baseBpm*mult*100)/100));
   if(document.activeElement!==rackBpmInp)rackBpmInp.value=fmtBpm(bpm);
   drawSevenSegDisplay(Math.round(bpm));
+  drawSeqDisplays();
 }
 function resolveLoopBeats(pad,rawDur){if(pad.loopBeats!==null)return pad.loopBeats;const ch=[4,8,2,16,1,32];for(const b of ch){const c=(b*60)/rawDur;if(c>=70&&c<=155)return b;}let best=4,minD=Infinity;for(const b of ch){const d=Math.abs((b*60)/rawDur-105);if(d<minD){minD=d;best=b;}}return best;}
 function detectLoopBpm(pad){if(!pad||!pad.buffer)return null;const rawDur=(pad.endNorm-pad.startNorm)*pad.buffer.duration;if(rawDur<0.05)return null;const beats=resolveLoopBeats(pad,rawDur),base=(beats*60)/rawDur,effRate=getEffectivePadRate(pad);return{bpm:base*effRate,padBpm:base*pad.pitch,baseBpm:base,beats,dur:rawDur/effRate};}
@@ -388,7 +663,7 @@ function panicKillAll(){
     delayLines.forEach(d=>{d.inG.gain.cancelScheduledValues(n);d.fb.gain.cancelScheduledValues(n);d.wet.gain.cancelScheduledValues(n);d.inG.gain.setValueAtTime(0,n);d.fb.gain.setValueAtTime(0,n);d.wet.gain.setValueAtTime(0,n);});
     if(mainFx==="delay")setTimeout(()=>{if(mainFx==="delay")applyFxRealtime();},130);
   }
-  syncPadVisuals();drawSevenSegDisplay(bpm);renderAllWaveCanvases();
+  syncPadVisuals();drawSevenSegDisplay(bpm);drawSeqDisplays(0,0);renderAllWaveCanvases();
   const c=$("btn-cancel");c.classList.add("lit");setTimeout(()=>c.classList.remove("lit"),180);
   hud.innerHTML="<b>CANCEL // PANIC KILL</b> — ALL AUDIO STOPPED";
 }
@@ -396,7 +671,7 @@ function switchBank(nb){
   currentBank=nb;deleteMode=false;truncateMode=false;deleteTargetPad=null;
   document.querySelectorAll("#bank-selector [data-bank]").forEach(b=>b.classList.toggle("active",+b.dataset.bank===currentBank));
   ["seq-bank-lbl","mix-bank-lbl","arr-bank-lbl","drawer-bank-lbl"].forEach(id=>$(id).textContent=BANK_NAMES[currentBank]);
-  updateDynamicDisplay();refreshAllBankUI();syncPadVisuals();syncWaveEditorUI();renderAllWaveCanvases();
+  updateDynamicDisplay();refreshAllBankUI(true);syncPadVisuals();syncWaveEditorUI();renderAllWaveCanvases();
 }
 $("btn-ab").onclick=()=>switchBank(currentBank===0?1:0);
 $("btn-cd").onclick=()=>switchBank(currentBank===2?3:2);
@@ -427,7 +702,9 @@ $("btn-remain").onclick=()=>{if(deleteMode||truncateMode){deleteMode=false;trunc
 function switchTab(t){
   document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("active",b.dataset.tab===t));
   document.querySelectorAll(".view-panel").forEach(v=>v.classList.toggle("active",v.id===`view-${t}`));
-  syncPadVisuals();if(t==="wave"){syncWaveEditorUI();showPadBpmOnDisplay(curPadObj());requestAnimationFrame(renderAllWaveCanvases);}
+  syncPadVisuals();
+  if(t==="seq")requestAnimationFrame(()=>drawSeqDisplays());
+  if(t==="wave"){syncWaveEditorUI();showPadBpmOnDisplay(curPadObj());requestAnimationFrame(renderAllWaveCanvases);}
 }
 $("btn-mark").onclick=()=>{
   if(deleteMode){truncateMode=!truncateMode;deleteTargetPad=truncateMode?(deleteTargetPad!==null?deleteTargetPad:(curPadObj().buffer?selectedPad:null)):null;syncPadVisuals();
@@ -601,38 +878,75 @@ $("inp-folder").onchange=e=>{addFilesToTree(e.target.files);e.target.value="";};
 const getStepDuration=s=>{const b=60/bpm/4,sw=(swingPct/100)*b*0.5;return s%2===0?b+sw:b-sw;};
 function scheduleStep(step,bar,time){const pat=patterns[playMode==="song"?songBars[bar].pat:currentPat];for(let b=0;b<NUM_BANKS;b++)for(let p=0;p<NUM_PADS;p++){const v=pat[b][p][step];if(v>0&&(playMode!=="song"||songBars[bar].tracks[b][p]))triggerPad(b,p,time,true,null,v);}setTimeout(()=>{if(isPlaying)updatePlayheadUI(step,bar);},Math.max(0,(time-ac.currentTime)*1000));}
 function schedulerTick(){while(nextStepTime<ac.currentTime+0.1){scheduleStep(currentStep,currentBar,nextStepTime);nextStepTime+=getStepDuration(currentStep);if(++currentStep>=NUM_STEPS){currentStep=0;if(playMode==="song")currentBar=(currentBar+1)%NUM_BARS;}}}
-function startTransport(){initAudio();if(ac.state==="suspended")ac.resume();if(isPlaying)return;isPlaying=true;currentStep=0;currentBar=0;nextStepTime=ac.currentTime+0.03;schedTimer=setInterval(schedulerTick,25);$("btn-play").classList.add("lit");drawSevenSegDisplay(bpm);}
-function stopTransport(){isPlaying=false;if(schedTimer){clearInterval(schedTimer);schedTimer=null;}$("btn-play").classList.remove("lit");document.querySelectorAll(".step-num.now,.step-cell.playhead,.arr-bar-pat.now,.arr-cell.now").forEach(e=>e.classList.remove("now","playhead"));stepLed.textContent="01:01";}
-function updatePlayheadUI(step,bar){stepLed.textContent=`${String(bar+1).padStart(2,"0")}:${String(step+1).padStart(2,"0")}`;document.querySelectorAll(".step-num.now,.step-cell.playhead,.arr-bar-pat.now,.arr-cell.now").forEach(e=>e.classList.remove("now","playhead"));if($(`snum-${step}`))$(`snum-${step}`).classList.add("now");document.querySelectorAll(`.step-cell[data-step="${step}"]`).forEach(e=>e.classList.add("playhead"));if(playMode==="song"){if($(`arr-bp-${bar}`))$(`arr-bp-${bar}`).classList.add("now");document.querySelectorAll(`.arr-cell[data-bar="${bar}"]`).forEach(e=>e.classList.add("now"));}}
-function updateVelSquareUI(p,v){const sq=$(`seq-vel-${p}`);if(!sq)return;sq.style.setProperty("--v",v);sq.querySelector("span").textContent=Math.round(v*99);}
+function startTransport(){initAudio();if(ac.state==="suspended")ac.resume();if(isPlaying)return;isPlaying=true;currentStep=0;currentBar=0;nextStepTime=ac.currentTime+0.03;schedTimer=setInterval(schedulerTick,25);$("btn-play").classList.add("lit");drawSevenSegDisplay(bpm);drawSeqDisplays(0,0);}
+function stopTransport(){isPlaying=false;if(schedTimer){clearInterval(schedTimer);schedTimer=null;}$("btn-play").classList.remove("lit");document.querySelectorAll(".step-num.now,.step-cell.playhead,.arr-bar-pat.now,.arr-cell.now").forEach(e=>e.classList.remove("now","playhead"));stepLed.textContent="01:01";drawSeqDisplays(0,0);}
+function updatePlayheadUI(step,bar){stepLed.textContent=`${String(bar+1).padStart(2,"0")}:${String(step+1).padStart(2,"0")}`;drawSeqDisplays(step,bar);document.querySelectorAll(".step-num.now,.step-cell.playhead,.arr-bar-pat.now,.arr-cell.now").forEach(e=>e.classList.remove("now","playhead"));if($(`snum-${step}`))$(`snum-${step}`).classList.add("now");document.querySelectorAll(`.step-cell[data-step="${step}"]`).forEach(e=>e.classList.add("playhead"));if(playMode==="song"){if($(`arr-bp-${bar}`))$(`arr-bp-${bar}`).classList.add("now");document.querySelectorAll(`.arr-cell[data-bar="${bar}"]`).forEach(e=>e.classList.add("now"));}}
+
+function updateVelSquareUI(p,v,animate=false){
+  const sq=$(`seq-vel-${p}`);if(!sq)return;
+  sq.style.setProperty("--v",v);
+  sq.title=`Track Velocity: ${Math.round(v*100)}% (Drag, Scroll, or Dbl-Click to Reset)`;
+  const cap=sq.querySelector(".seq-vel-cap");
+  if(cap){
+    const norm=Math.max(0,Math.min(1,(v-0.15)/0.85));
+    const deg=(norm-0.5)*270;
+    cap.style.transition=animate?"transform 0.18s cubic-bezier(0.22,1,0.36,1)":"none";
+    cap.style.transform=`rotate(${deg.toFixed(1)}deg)`;
+  }
+}
 function applyStepCellUI(c,v){c.classList.toggle("on",v>0);if(v>0)c.style.setProperty("--v",v);else c.style.removeProperty("--v");}
-function buildPatternButtons(){const w=$("pat-selector");for(let i=0;i<NUM_PATS;i++){const b=document.createElement("button");b.className="hw-btn mini-btn"+(i===0?" active":"");b.textContent=`P${i+1}`;b.onclick=()=>{currentPat=i;w.querySelectorAll(".mini-btn").forEach((btn,idx)=>btn.classList.toggle("active",idx===i));$("seq-pat-label").textContent=`P${i+1}`;refreshSequencerUI();};w.appendChild(b);}}
+function buildPatternButtons(){const w=$("pat-selector");for(let i=0;i<NUM_PATS;i++){const b=document.createElement("button");b.className="hw-btn mini-btn"+(i===0?" active":"");b.textContent=`P${i+1}`;b.onclick=()=>{currentPat=i;w.querySelectorAll(".mini-btn").forEach((btn,idx)=>btn.classList.toggle("active",idx===i));$("seq-pat-label").textContent=`P${i+1}`;refreshSequencerUI();drawSeqDisplays();};w.appendChild(b);}}
 function buildSequencerGrid(){
   const w=$("seq-grid");w.innerHTML="";const hdr=document.createElement("div");hdr.className="seq-step-nums";hdr.innerHTML="<div></div>";
   for(let s=0;s<NUM_STEPS;s++){const d=document.createElement("div");d.id=`snum-${s}`;d.className="step-num"+(s%4===0?" beat":"");d.textContent=s+1;hdr.appendChild(d);}w.appendChild(hdr);
   for(let p=0;p<NUM_PADS;p++){
     const row=document.createElement("div");row.className="seq-row";const info=document.createElement("div");info.className="seq-pad-info";
-    info.innerHTML=`<span class="seq-pad-num" id="seq-pnum-${p}">A${p+1}</span><span class="seq-pad-name" id="seq-pname-${p}"></span><button class="seq-mute-mini" id="seq-mute-${p}" title="Mute">M</button><div class="seq-vel-sq" id="seq-vel-${p}" title="Drag Up/Down: Track Velocity"><span>84</span></div>`;
+    info.innerHTML=`<span class="seq-pad-num" id="seq-pnum-${p}">A${p+1}</span><span class="seq-pad-name" id="seq-pname-${p}"></span><button class="seq-mute-mini" id="seq-mute-${p}" title="Mute">M</button><div class="seq-vel-sq" id="seq-vel-${p}"><div class="seq-vel-cap"><div class="seq-vel-ptr"></div></div></div>`;
     info.onmousedown=e=>{if(e.target.closest(".seq-mute-mini")||e.target.closest(".seq-vel-sq"))return;selectedPad=p;updateDynamicDisplay();syncWaveEditorUI();showPadBpmOnDisplay(banks[currentBank][p]);triggerPad(currentBank,p,0,false,null,trackVel[currentBank][p]);};
     info.querySelector(".seq-mute-mini").onclick=()=>{banks[currentBank][p].mute=!banks[currentBank][p].mute;updateAllMixerNodes();refreshMixerUI();refreshSequencerUI();};
-    info.querySelector(".seq-vel-sq").onmousedown=e=>{e.preventDefault();e.stopPropagation();const sy=e.clientY,sv=trackVel[currentBank][p],mv=ev=>{const nv=Math.max(0.15,Math.min(1.0,sv+(sy-ev.clientY)/95));trackVel[currentBank][p]=nv;updateVelSquareUI(p,nv);hud.innerHTML=`TRACK ${BANK_NAMES[currentBank]}${p+1} PAINT VELOCITY: <b>${Math.round(nv*100)}%</b>`;},up=()=>{window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",up);};window.addEventListener("mousemove",mv);window.addEventListener("mouseup",up);};
+    const velPot=info.querySelector(".seq-vel-sq");
+    velPot.onmousedown=e=>{e.preventDefault();e.stopPropagation();const sy=e.clientY,sv=trackVel[currentBank][p],mv=ev=>{const nv=Math.max(0.15,Math.min(1.0,sv+(sy-ev.clientY)/95));trackVel[currentBank][p]=nv;updateVelSquareUI(p,nv,false);hud.innerHTML=`TRACK ${BANK_NAMES[currentBank]}${p+1} PAINT VELOCITY: <b>${Math.round(nv*100)}%</b>`;},up=()=>{window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",up);};window.addEventListener("mousemove",mv);window.addEventListener("mouseup",up);};
+    velPot.addEventListener("wheel",e=>{e.preventDefault();e.stopPropagation();const nv=Math.max(0.15,Math.min(1.0,trackVel[currentBank][p]+(e.deltaY<0?0.05:-0.05)));trackVel[currentBank][p]=nv;updateVelSquareUI(p,nv,false);hud.innerHTML=`TRACK ${BANK_NAMES[currentBank]}${p+1} PAINT VELOCITY: <b>${Math.round(nv*100)}%</b>`;},{passive:false});
+    velPot.ondblclick=e=>{e.stopPropagation();trackVel[currentBank][p]=0.85;updateVelSquareUI(p,0.85,true);hud.innerHTML=`TRACK ${BANK_NAMES[currentBank]}${p+1} PAINT VELOCITY: <b>85%</b>`;};
     row.appendChild(info);
     for(let s=0;s<NUM_STEPS;s++){
-      const c=document.createElement("button");c.className="step-cell"+(s%4===0?" beat-start":"");c.dataset.pad=p;c.dataset.step=s;
-      c.onmousedown=e=>{e.preventDefault();const sy=e.clientY,iV=patterns[currentPat][currentBank][p][s];let moved=false,bV=iV>0?iV:trackVel[currentBank][p];const mv=ev=>{if(!moved&&Math.abs(ev.clientY-sy)<4)return;moved=true;const nv=Math.max(0.15,Math.min(1.0,bV+(sy-ev.clientY)/90));patterns[currentPat][currentBank][p][s]=nv;trackVel[currentBank][p]=nv;applyStepCellUI(c,nv);updateVelSquareUI(p,nv);hud.innerHTML=`STEP ${s+1} (${BANK_NAMES[currentBank]}${p+1}) VELOCITY: <b>${Math.round(nv*100)}%</b>`;},up=()=>{window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",up);if(!moved){const nv=iV>0?0:trackVel[currentBank][p];patterns[currentPat][currentBank][p][s]=nv;applyStepCellUI(c,nv);if(nv>0)updateVelSquareUI(p,nv);}};window.addEventListener("mousemove",mv);window.addEventListener("mouseup",up);};
+      const c=document.createElement("button");c.className="step-cell"+(s%4===0?" beat-start":"")+(Math.floor(s/4)%2===1?" beat-alt":"");c.dataset.pad=p;c.dataset.step=s;
+      c.onmousedown=e=>{e.preventDefault();const sy=e.clientY,iV=patterns[currentPat][currentBank][p][s];let moved=false,bV=iV>0?iV:trackVel[currentBank][p];const mv=ev=>{if(!moved&&Math.abs(ev.clientY-sy)<4)return;moved=true;const nv=Math.max(0.15,Math.min(1.0,bV+(sy-ev.clientY)/90));patterns[currentPat][currentBank][p][s]=nv;trackVel[currentBank][p]=nv;applyStepCellUI(c,nv);updateVelSquareUI(p,nv,false);hud.innerHTML=`STEP ${s+1} (${BANK_NAMES[currentBank]}${p+1}) VELOCITY: <b>${Math.round(nv*100)}%</b>`;},up=()=>{window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",up);if(!moved){const nv=iV>0?0:trackVel[currentBank][p];patterns[currentPat][currentBank][p][s]=nv;applyStepCellUI(c,nv);if(nv>0)updateVelSquareUI(p,nv,true);}};window.addEventListener("mousemove",mv);window.addEventListener("mouseup",up);};
       row.appendChild(c);
     }
     w.appendChild(row);
   }
 }
-function refreshSequencerUI(){const bn=BANK_NAMES[currentBank],pat=patterns[currentPat][currentBank];for(let p=0;p<NUM_PADS;p++){$(`seq-pnum-${p}`).textContent=`${bn}${p+1}`;$(`seq-pname-${p}`).textContent=banks[currentBank][p].name;$(`seq-mute-${p}`).classList.toggle("muted",banks[currentBank][p].mute);updateVelSquareUI(p,trackVel[currentBank][p]);}document.querySelectorAll(".step-cell").forEach(c=>applyStepCellUI(c,pat[+c.dataset.pad][+c.dataset.step]));}
+function refreshSequencerUI(animatePots=false){const bn=BANK_NAMES[currentBank],pat=patterns[currentPat][currentBank];for(let p=0;p<NUM_PADS;p++){$(`seq-pnum-${p}`).textContent=`${bn}${p+1}`;$(`seq-pname-${p}`).textContent=banks[currentBank][p].name;$(`seq-mute-${p}`).classList.toggle("muted",banks[currentBank][p].mute);updateVelSquareUI(p,trackVel[currentBank][p],animatePots);}document.querySelectorAll(".step-cell").forEach(c=>applyStepCellUI(c,pat[+c.dataset.pad][+c.dataset.step]));}
+
+// PRO TOOLS MOTORIZED FADER ANIMATION
+function cancelFaderAnim(i){
+  if(faderAnimIds[i]!==null){cancelAnimationFrame(faderAnimIds[i]);faderAnimIds[i]=null;}
+}
+function animateMixerFader(i,targetVal,dur=260){
+  cancelFaderAnim(i);
+  const el=$(`mix-vol-${i}`);if(!el)return;
+  const from=parseFloat(el.value);
+  if(!Number.isFinite(from)||Math.abs(targetVal-from)<0.003){el.value=targetVal;return;}
+  const t0=performance.now();
+  const step=now=>{
+    const p=Math.min(1,(now-t0)/dur);
+    const ease=p<0.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+    el.value=(from+(targetVal-from)*ease).toFixed(3);
+    if(p<1)faderAnimIds[i]=requestAnimationFrame(step);
+    else{el.value=targetVal;faderAnimIds[i]=null;}
+  };
+  faderAnimIds[i]=requestAnimationFrame(step);
+}
 function buildMixerUI(){
   const g=$("mixer-grid");g.innerHTML="";
   for(let i=0;i<NUM_PADS;i++){
     const s=document.createElement("div");s.className="mix-strip";
     s.innerHTML=`<div class="mix-ch-id" id="mix-chid-${i}">A${i+1}</div><div class="mix-ch-name" id="mix-pname-${i}"></div><div class="mix-param"><span class="mix-param-lbl">PAN</span><input type="range" class="mix-mini-slider" id="mix-pan-${i}" min="-1" max="1" step="0.05" value="0"></div><div class="mix-param"><span class="mix-param-lbl">TUNE</span><input type="range" class="mix-mini-slider" id="mix-tune-${i}" min="0.5" max="2.0" step="0.005" value="1"></div><div class="mix-fader-area"><div class="fader-track-wrap"><input type="range" class="v-fader" id="mix-vol-${i}" min="0" max="1.2" step="0.01" value="0.85" orient="vertical"></div><div class="led-meter" id="meter-${i}"></div></div><div class="mix-btns"><button class="mix-btn" id="mix-fx-${i}">FX</button></div><div class="mix-btns"><button class="mix-btn" id="mix-m-${i}">M</button><button class="mix-btn" id="mix-s-${i}">S</button></div>`;
     g.appendChild(s);const mEl=s.querySelector(`#meter-${i}`);meterSegsUI[i]=[];for(let k=0;k<12;k++){const d=document.createElement("div");d.className="meter-seg";mEl.appendChild(d);meterSegsUI[i].push(d);}
-    s.querySelector(`#mix-vol-${i}`).oninput=e=>{banks[currentBank][i].vol=+e.target.value;updateAllMixerNodes();};
+    const volSlider=s.querySelector(`#mix-vol-${i}`);
+    volSlider.onmousedown=()=>cancelFaderAnim(i);
+    volSlider.oninput=e=>{cancelFaderAnim(i);banks[currentBank][i].vol=+e.target.value;updateAllMixerNodes();};
     s.querySelector(`#mix-pan-${i}`).oninput=e=>{banks[currentBank][i].pan=+e.target.value;updateAllMixerNodes();};
     s.querySelector(`#mix-tune-${i}`).oninput=e=>setPadPitchRate(currentBank,i,+e.target.value);s.querySelector(`#mix-tune-${i}`).ondblclick=()=>setPadPitchRate(currentBank,i,1.0);
     s.querySelector(`#mix-fx-${i}`).onclick=()=>{banks[currentBank][i].fxSend=!banks[currentBank][i].fxSend;updateAllMixerNodes();applyFxRealtime();refreshMixerUI();syncPadVisuals();};
@@ -640,14 +954,28 @@ function buildMixerUI(){
     s.querySelector(`#mix-s-${i}`).onclick=()=>{banks[currentBank][i].solo=!banks[currentBank][i].solo;updateAllMixerNodes();refreshMixerUI();};
   }
 }
-function refreshMixerUI(){const bn=BANK_NAMES[currentBank];for(let i=0;i<NUM_PADS;i++){const ch=banks[currentBank][i];$(`mix-chid-${i}`).textContent=`${bn}${i+1}`;$(`mix-pname-${i}`).textContent=ch.name;$(`mix-vol-${i}`).value=ch.vol;$(`mix-pan-${i}`).value=ch.pan;$(`mix-tune-${i}`).value=ch.pitch;$(`mix-fx-${i}`).classList.toggle("fx-on",ch.fxSend);$(`mix-m-${i}`).classList.toggle("m-on",ch.mute);$(`mix-s-${i}`).classList.toggle("s-on",ch.solo);}}
+function refreshMixerUI(animateFaders=false){
+  const bn=BANK_NAMES[currentBank];
+  for(let i=0;i<NUM_PADS;i++){
+    const ch=banks[currentBank][i];
+    $(`mix-chid-${i}`).textContent=`${bn}${i+1}`;
+    $(`mix-pname-${i}`).textContent=ch.name;
+    if(animateFaders)animateMixerFader(i,ch.vol);
+    else{cancelFaderAnim(i);$(`mix-vol-${i}`).value=ch.vol;}
+    $(`mix-pan-${i}`).value=ch.pan;
+    $(`mix-tune-${i}`).value=ch.pitch;
+    $(`mix-fx-${i}`).classList.toggle("fx-on",ch.fxSend);
+    $(`mix-m-${i}`).classList.toggle("m-on",ch.mute);
+    $(`mix-s-${i}`).classList.toggle("s-on",ch.solo);
+  }
+}
 function buildArrangerUI(){
   const w=$("arr-grid");w.innerHTML="";const hdr=document.createElement("div");hdr.className="arr-header-row";hdr.innerHTML=`<div style="font-size:9px;color:var(--silk-dim);padding-left:4px">BAR / PAT</div>`;
   for(let b=0;b<NUM_BARS;b++){const btn=document.createElement("button");btn.className="arr-bar-pat";btn.id=`arr-bp-${b}`;btn.textContent=`P${songBars[b].pat+1}`;btn.onclick=()=>{songBars[b].pat=(songBars[b].pat+1)%NUM_PATS;btn.textContent=`P${songBars[b].pat+1}`;};hdr.appendChild(btn);}w.appendChild(hdr);
   for(let t=0;t<NUM_PADS;t++){const row=document.createElement("div");row.className="arr-row";row.innerHTML=`<div class="arr-trk-lbl"><span id="arr-tid-${t}">A${t+1}</span><b id="arr-pname-${t}" style="font-weight:400;overflow:hidden;text-overflow:ellipsis"></b></div>`;for(let b=0;b<NUM_BARS;b++){const c=document.createElement("button");c.className="arr-cell";c.dataset.bar=b;c.dataset.track=t;c.onmousedown=()=>{const cur=songBars[b].tracks[currentBank][t];songBars[b].tracks[currentBank][t]=!cur;c.classList.toggle("on",!cur);};row.appendChild(c);}w.appendChild(row);}
 }
 function refreshArrangerUI(){const bn=BANK_NAMES[currentBank];for(let t=0;t<NUM_PADS;t++){$(`arr-tid-${t}`).textContent=`${bn}${t+1}`;$(`arr-pname-${t}`).textContent=banks[currentBank][t].name;}document.querySelectorAll(".arr-cell").forEach(c=>c.classList.toggle("on",songBars[+c.dataset.bar].tracks[currentBank][+c.dataset.track]));}
-function refreshAllBankUI(){refreshSequencerUI();refreshMixerUI();refreshArrangerUI();}
+function refreshAllBankUI(animate=false){refreshSequencerUI(animate);refreshMixerUI(animate);refreshArrangerUI();}
 
 const meterBuf=new Uint8Array(128);
 function uiAnimLoop(){
@@ -669,7 +997,7 @@ $("btn-mode-song").onclick=()=>{playMode="song";$("btn-mode-song").classList.add
 $("rng-swing").oninput=e=>{swingPct=+e.target.value;$("lbl-swing").textContent=`${swingPct}%`;};
 if($("btn-seq-demo"))$("btn-seq-demo").style.display="none";
 $("btn-seq-clear").onclick=()=>{patterns[currentPat][currentBank].forEach(r=>r.fill(0));refreshSequencerUI();};
-$("btn-mix-reset").onclick=()=>{for(let i=0;i<NUM_PADS;i++)Object.assign(banks[currentBank][i],{vol:.85,pan:0,pitch:1,mute:false,solo:false});updateAllMixerNodes();applyFxRealtime();refreshMixerUI();refreshSequencerUI();syncWaveEditorUI();};
+$("btn-mix-reset").onclick=()=>{for(let i=0;i<NUM_PADS;i++)Object.assign(banks[currentBank][i],{vol:.85,pan:0,pitch:1,mute:false,solo:false});updateAllMixerNodes();applyFxRealtime();refreshMixerUI(true);refreshSequencerUI();syncWaveEditorUI();};
 $("btn-arr-fill").onclick=()=>{songBars.forEach(b=>b.tracks[currentBank].fill(true));refreshArrangerUI();};
 $("btn-arr-clear").onclick=()=>{songBars.forEach(b=>b.tracks[currentBank].fill(false));refreshArrangerUI();};
 
@@ -718,10 +1046,10 @@ window.addEventListener("keydown",e=>{
   if(e.code==="Space"){e.preventDefault();isPlaying?stopTransport():startTransport();}
 });
 window.addEventListener("keyup",e=>{if(document.activeElement&&document.activeElement.tagName==="INPUT")return;if(e.key>="1"&&e.key<="8"){const i=+e.key-1;if(banks[currentBank][i].gate&&!holdOn)stopPadVoice(currentBank,i);}});
-window.addEventListener("resize",()=>requestAnimationFrame(()=>{drawSevenSegDisplay(displayedLedValue);renderAllWaveCanvases();}));
+window.addEventListener("resize",()=>requestAnimationFrame(()=>{drawSevenSegDisplay(displayedLedValue);drawSeqDisplays();renderAllWaveCanvases();}));
 
 renderSampleTree();buildPatternButtons();buildSequencerGrid();buildMixerUI();buildArrangerUI();
 refreshAllBankUI();updateDynamicDisplay();syncPadVisuals();
-requestAnimationFrame(()=>{drawSevenSegDisplay(bpm);renderAllWaveCanvases();});
+requestAnimationFrame(()=>{drawSevenSegDisplay(bpm);drawSeqDisplays(0,0);renderAllWaveCanvases();});
 requestAnimationFrame(uiAnimLoop);
 })();
