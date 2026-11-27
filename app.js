@@ -1100,7 +1100,81 @@ requestAnimationFrame(()=>{drawSevenSegDisplay(bpm);drawSeqDisplays(0,0);renderA
 
 
 
+// MONKEY PATCH: 3s TRIBUTE FADE-OUT + ON-BOOT SP PAD FACTORY LIGHT SHOW
+(()=>{
+  const runTributeFade=()=>{
+    const targets=new Set();
+    document.querySelectorAll("[id*='tribute' i],[class*='tribute' i],[data-tribute]").forEach(el=>targets.add(el));
+    const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+    let n;
+    while((n=w.nextNode())){
+      if(/\btribute\b/i.test(n.nodeValue)&&n.parentElement){
+        const el=n.parentElement.closest("[id*='tribute' i],[class*='tribute' i],section,aside,header,div,p,span")||n.parentElement;
+        if(el&&el!==document.body&&el!==document.documentElement)targets.add(el);
+      }
+    }
+    if(!targets.size)return;
+    setTimeout(()=>{
+      targets.forEach(el=>{
+        if(!el.isConnected)return;
+        el.style.transition="opacity .7s ease, transform .7s ease";
+        el.style.opacity="0";
+        el.style.pointerEvents="none";
+        setTimeout(()=>{if(el.isConnected)el.remove();},750);
+      });
+    },3000);
+  };
 
+  const runBootPadDemo=()=>{
+    const pads=[...document.querySelectorAll(".pad")];
+    if(!pads.length)return;
+    const _sync=typeof syncPadVisuals==="function"?syncPadVisuals:null;
+    let demoActive=true;
+    const setDemoLit=(indices,on)=>{
+      pads.forEach((el,i)=>{
+        if(indices.includes(i)){
+          el.classList.toggle("lit",on);
+          el.style.transform=on?"translateY(1px) scale(0.985)":"";
+        }
+      });
+    };
+    if(_sync){
+      window.syncPadVisuals=function(...args){
+        _sync.apply(this,args);
+        if(demoActive)pads.forEach(el=>{if(el.dataset.demoLit==="1")el.classList.add("lit");});
+      };
+    }
+    // Factory demo pattern: sweep up, sweep down, alternating pairs, flash all
+    const seq=[
+      [0],[1],[2],[3],[4],[5],[6],[7],
+      [7],[6],[5],[4],[3],[2],[1],[0],
+      [0,2,4,6],[1,3,5,7],[0,2,4,6],[1,3,5,7],
+      [0,1,2,3,4,5,6,7],[],[0,1,2,3,4,5,6,7],[]
+    ];
+    let step=0;
+    const stepMs=85;
+    const timer=setInterval(()=>{
+      pads.forEach(el=>{delete el.dataset.demoLit;el.style.transform="";});
+      const active=seq[step]||[];
+      active.forEach(idx=>{if(pads[idx])pads[idx].dataset.demoLit="1";});
+      setDemoLit(active,true);
+      step++;
+      if(step>=seq.length){
+        clearInterval(timer);
+        demoActive=false;
+        pads.forEach(el=>{delete el.dataset.demoLit;el.style.transform="";});
+        if(_sync)_sync();
+      }
+    },stepMs);
+  };
+
+  if(document.readyState==="loading"){
+    document.addEventListener("DOMContentLoaded",()=>{runTributeFade();runBootPadDemo();},{once:true});
+  }else{
+    runTributeFade();
+    runBootPadDemo();
+  }
+})();
 
 
 
